@@ -1,91 +1,131 @@
 # miab-backups
 
-Simple automated **Restic → rclone/WebDAV** backups **with Telegram alerts**.
+Automated Restic + rclone/WebDAV backups with Telegram notifications.
 
 ---
 
-## ✨ Features
-- Encrypted backups of `/home/user-data` with **Restic**
-- Upload to any **WebDAV** storage via **rclone**
-- **Telegram** notifications (✅ success / ❌ failure)
-- One-line dry-run for safe testing
-- Designed for cron or systemd-timer
+## 📦 Prerequisites
+
+- **Bash** (`#!/usr/bin/env bash`)  
+- **restic** installed and in `$PATH`  
+- **rclone** configured with a WebDAV remote (e.g. `webdavbox`)  
+- **jq** (for checking Telegram API responses)
 
 ---
 
-## ⚙️ Requirements
-| Tool | Tested version |
-|------|----------------|
-| bash | ≥ 5.x |
-| restic | ≥ 0.16 |
-| rclone | ≥ 1.65 |
-| jq | any |
+## ⚙️ Configuration
 
----
+1. Copy the example environment file and secure it:
 
-## 🚀 Quick Start
-
-### 1. Clone
 ```bash
-git clone https://github.com/Anton-Babaskin/miab-backups.git
-cd miab-backups
-2. Create Telegram secrets
-bash
-Копировать
-Редактировать
 sudo cp .env.example /etc/miab-notify.env
 sudo chmod 600 /etc/miab-notify.env
-# edit the file and set BOT_TOKEN / CHAT_ID
-3. Make scripts executable
-bash
-Копировать
-Редактировать
+```
+
+2. Edit `/etc/miab-notify.env` and fill in your Telegram bot credentials:
+
+```ini
+BOT_TOKEN="123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+CHAT_ID="987654321"
+```
+
+3. Make scripts executable:
+
+```bash
 chmod +x scripts/*.sh
-4. Configure rclone (once)
-bash
-Копировать
-Редактировать
-rclone config   # create a remote named   webdavbox
-5. Test without uploading
-bash
-Копировать
-Редактировать
-bash -x scripts/restic-rclone-backup.sh --dry-run
-You should instantly get a ✅ message in Telegram.
+```
 
-📝 Cron example
-cron
-Копировать
-Редактировать
-0 4 * * * /root/miab-backups/scripts/restic-rclone-backup.sh \
-  >> /var/log/restic-cron.log 2>&1
-📰 Script overview
-File	Purpose
-scripts/telegram_notify.sh	Shared helper; loads BOT_TOKEN / CHAT_ID from /etc/miab-notify.env and exposes send_telegram()
-scripts/restic-rclone-backup.sh	Full backup → check → prune → ✅/❌ alert (uses rclone:webdavbox:/backup)
-scripts/restic-backup.sh	Same flow but targets a local or other Restic repo
+---
 
-Both backup scripts start with:
+## 🔔 Telegram Notification Helper
 
-bash
-Копировать
-Редактировать
+**scripts/telegram_notify.sh**
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+source /etc/miab-notify.env
+
+send_telegram() {
+  local msg enc
+  msg="$1"
+  enc=$(printf '%s' "$msg" \
+    | sed -e 's/%/%25/g' -e 's/&/%26/g' -e 's/#/%23/g')
+  curl -fsSL --retry 3 --max-time 10 \
+       -d "chat_id=$CHAT_ID&text=$enc" \
+       "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+    | jq -e '.ok' >/dev/null
+}
+```
+
+---
+
+## 💾 Backup Script
+
+**scripts/restic-rclone-backup.sh**
+
+```bash
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/telegram_notify.sh"
+
+# on any error → send ❌ and exit
 trap 'send_telegram "❌ *Restic Backup Failed* on $(hostname -f) at $(date +%F %T)"; exit 1' ERR
-and finish with a formatted success message.
 
-📂 Customisation
-Change RESTIC_REPO, RESTIC_PASSWORD, BACKUP_SRC, retention policy and log path inside the script(s).
+export RESTIC_PASSWORD="cvZ7zJHHigkL7Rcw"
+export RESTIC_REPO="rclone:webdavbox:/backup"
+BACKUP_SRC="/home/user-data"
+LOG_FILE="/var/log/restic.log"
 
-Add additional alerts anywhere with
+echo "[$(date +'%F %T')] 🔄 Starting Restic backup" >> "$LOG_FILE"
+START_TIME=$(date +%s)
 
-bash
-Копировать
-Редактировать
-send_telegram "ℹ️ Custom message"
-❓ FAQ
-Dry-run uploads data? — No. --dry-run only prints what would be backed up, still triggering alerts.
-Where do I put my token? — /etc/miab-notify.env, never inside the repo.
-Can I use S3 instead of WebDAV? — Yes, just set RESTIC_REPO="s3:s3remote:bucket/folder" (must exist).
+restic -r "$RESTIC_REPO" backup "$BACKUP_SRC" >> "$LOG_FILE" 2>&1
+restic -r "$RESTIC_REPO" check                        >> "$LOG_FILE" 2>&1
+restic -r "$RESTIC_REPO" forget --keep-daily 7 \
+  --keep-weekly 4 --keep-monthly 6 --prune           >> "$LOG_FILE" 2>&1
+
+END_TIME=$(date +%s)
+DURATION=$(( END_TIME - START_TIME ))
+DURATION_FMT=$(printf '%02d:%02d:%02d' $((DURATION/3600)) $((DURATION%3600/60)) $((DURATION%60)))
+
+echo "[$(date +'%F %T')] ✅ Restic backup completed in $DURATION_FMT" >> "$LOG_FILE"
+
+send_telegram "✅ *Restic Backup Completed*\n\
+📦 Host: \`$(hostname -f)\`\n\
+📁 Source: \`$BACKUP_SRC\`\n\
+🗂 Repository: \`$RESTIC_REPO\`\n\
+⏱ Duration: *$DURATION_FMT*\n\
+📅 $(date +'%F %T')"
+```
+
+---
+
+## 🔧 Usage Examples
+
+### Manual test
+
+```bash
+bash -x scripts/restic-rclone-backup.sh
+```
+
+### Cron entry for nightly backup
+
+```cron
+0 4 * * * /root/miab-backups/scripts/restic-rclone-backup.sh >> /var/log/restic-cron.log 2>&1
+```
+
+---
+
+## 📁 Notes
+
+- All Telegram credentials live in `/etc/miab-notify.env` and are excluded by `.gitignore`
+- Scripts never hard-code tokens or chat IDs
+- `trap ERR` ensures alerts on any failure
+- Central `telegram_notify.sh` makes reuse trivial
+
+---
+
+## 🪪 License
+
+MIT — use at your own risk.
