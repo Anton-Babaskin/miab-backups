@@ -1,40 +1,43 @@
-miab-backups
+markdown# miab-backups
+
 Automated Restic backups to a WebDAV remote via rclone, with Telegram notifications.
-📦 Prerequisites
 
-Bash (#!/usr/bin/env bash)
-restic installed and in $PATH
-rclone configured with a WebDAV remote (e.g., webdavbox)
-jq installed for parsing Telegram API responses
-flock for preventing concurrent cron runs (usually pre-installed)
+## 📦 Prerequisites
 
-⚙️ Configuration
+- Bash (`#!/usr/bin/env bash`)
+- `restic` installed and in `$PATH`
+- `rclone` configured with a WebDAV remote (e.g., `webdavbox`)
+- `jq` installed for parsing Telegram API responses
+- `flock` for preventing concurrent cron runs (usually pre-installed)
 
-Copy and secure the environment file:
-sudo cp .env.example /etc/miab-notify.env
-sudo chmod 600 /etc/miab-notify.env
+## ⚙️ Configuration
+
+1. **Copy and secure the environment file**:
+
+   ```bash
+   sudo cp .env.example /etc/miab-notify.env
+   sudo chmod 600 /etc/miab-notify.env
 
 
 Edit /etc/miab-notify.env with your Telegram bot credentials and Restic password:
-BOT_TOKEN="123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+bashBOT_TOKEN="123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
 CHAT_ID="987654321"
 RESTIC_PASSWORD="your_secure_password_here"
 
 
 Make scripts executable:
-chmod +x scripts/*.sh
+bashchmod +x scripts/*.sh
 sudo chmod 700 scripts/*.sh  # Restrict access
 
 
 Ensure log file is writable:
-sudo touch /var/log/restic.log
+bashsudo touch /var/log/restic.log
 sudo chmod 600 /var/log/restic.log
 
 
 Configure rclone:
 Ensure a WebDAV remote (e.g., webdavbox) is set up in rclone. Test it:
-rclone lsd webdavbox:/backup
-
+bashrclone lsd webdavbox:/backup
 
 
 🔔 Telegram Notification Helper
@@ -65,17 +68,14 @@ Telegram credentials are stored securely in /etc/miab-notify.env.
 🔧 Usage Examples
 Manual Test
 Run with debugging output:
-bash -x scripts/restic-rclone-backup.sh
-
+bashbash -x scripts/restic-rclone-backup.sh
 Cron Entry for Nightly Backup
 Add to crontab (crontab -e) to run at 4 AM, using flock to prevent concurrent runs:
-0 4 * * * flock -n /tmp/restic-backup.lock /path/to/miab-backups/scripts/restic-rclone-backup.sh >> /var/log/restic.log 2>&1
-
+bash0 4 * * * flock -n /tmp/restic-backup.lock /path/to/miab-backups/scripts/restic-rclone-backup.sh >> /var/log/restic.log 2>&1
 Replace /path/to/miab-backups with the actual path to the repository.
 Verify Backups
 Periodically test restorability (e.g., monthly):
-restic -r rclone:webdavbox:/backup restore latest --target /tmp/restore-test
-
+bashrestic -r rclone:webdavbox:/backup restore latest --target /tmp/restore-test
 📁 Notes
 
 All sensitive data (Telegram credentials, Restic password) is stored in /etc/miab-notify.env, excluded by .gitignore.
