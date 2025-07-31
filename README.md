@@ -1,125 +1,91 @@
-# miab-backups# 📦 Mail-in-a-Box Backup Script
+# miab-backups
 
-Automated encrypted backups using Restic + rclone + WebDAV + Telegram notifications.
-
----
-
-## 🚀 Features
-
-- 🔒 Encrypted backups of `/home/user-data` using **Restic**
-- ☁️ Upload to **WebDAV** storage via **rclone**
-- 📣 Telegram alerts on success/failure
-- ⏱️ Automated via **systemd** timer
+Simple automated **Restic → rclone/WebDAV** backups **with Telegram alerts**.
 
 ---
 
-## ⚙️ Quick Setup
+## ✨ Features
+- Encrypted backups of `/home/user-data` with **Restic**
+- Upload to any **WebDAV** storage via **rclone**
+- **Telegram** notifications (✅ success / ❌ failure)
+- One-line dry-run for safe testing
+- Designed for cron or systemd-timer
 
-### 1. Clone the repository
+---
 
+## ⚙️ Requirements
+| Tool | Tested version |
+|------|----------------|
+| bash | ≥ 5.x |
+| restic | ≥ 0.16 |
+| rclone | ≥ 1.65 |
+| jq | any |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone
 ```bash
 git clone https://github.com/Anton-Babaskin/miab-backups.git
 cd miab-backups
-```
+2. Create Telegram secrets
+bash
+Копировать
+Редактировать
+sudo cp .env.example /etc/miab-notify.env
+sudo chmod 600 /etc/miab-notify.env
+# edit the file and set BOT_TOKEN / CHAT_ID
+3. Make scripts executable
+bash
+Копировать
+Редактировать
+chmod +x scripts/*.sh
+4. Configure rclone (once)
+bash
+Копировать
+Редактировать
+rclone config   # create a remote named   webdavbox
+5. Test without uploading
+bash
+Копировать
+Редактировать
+bash -x scripts/restic-rclone-backup.sh --dry-run
+You should instantly get a ✅ message in Telegram.
 
-### 2. Install required tools
+📝 Cron example
+cron
+Копировать
+Редактировать
+0 4 * * * /root/miab-backups/scripts/restic-rclone-backup.sh \
+  >> /var/log/restic-cron.log 2>&1
+📰 Script overview
+File	Purpose
+scripts/telegram_notify.sh	Shared helper; loads BOT_TOKEN / CHAT_ID from /etc/miab-notify.env and exposes send_telegram()
+scripts/restic-rclone-backup.sh	Full backup → check → prune → ✅/❌ alert (uses rclone:webdavbox:/backup)
+scripts/restic-backup.sh	Same flow but targets a local or other Restic repo
 
-```bash
-apt update
-apt install -y restic rclone curl
-```
+Both backup scripts start with:
 
-### 3. Configure rclone
+bash
+Копировать
+Редактировать
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/telegram_notify.sh"
+trap 'send_telegram "❌ *Restic Backup Failed* on $(hostname -f) at $(date +%F %T)"; exit 1' ERR
+and finish with a formatted success message.
 
-```bash
-rclone config
-```
+📂 Customisation
+Change RESTIC_REPO, RESTIC_PASSWORD, BACKUP_SRC, retention policy and log path inside the script(s).
 
-- Type: `WebDAV`  
-- URL: `https://uXXXXXX.your-storagebox.de/backup`  
-- Vendor: `Other`  
-- Username & Password: from your provider
+Add additional alerts anywhere with
 
-### 4. Set variables in the script
-
-Edit `restic_rclone_webdav_backup.sh`:
-
-```bash
-BACKUP_SRC="/home/user-data"
-RCLONE_REMOTE="remote:webdav-folder"
-RESTIC_PASSWORD="your_restic_password"
-TELEGRAM_BOT_TOKEN="your_bot_token"
-TELEGRAM_CHAT_ID="your_chat_id"
-```
-
-### 5. Initialize the Restic repository
-
-```bash
-RESTIC_PASSWORD=your_restic_password \
-restic -r rclone:remote:webdav-folder init
-```
-
-### 6. Make the script executable
-
-```bash
-chmod +x restic_rclone_webdav_backup.sh
-```
-
-### 7. Setup systemd
-
-```bash
-cp systemd/restic-backup.service /etc/systemd/system/
-cp systemd/restic-backup.timer /etc/systemd/system/
-
-systemctl daemon-reload
-systemctl enable --now restic-backup.timer
-```
-
----
-
-## 🕒 Example systemd timer: Daily at 03:30
-
-```ini
-# /etc/systemd/system/restic-backup.timer
-[Unit]
-Description=Daily Restic backup
-
-[Timer]
-OnCalendar=*-*-* 03:30:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
----
-
-## 📤 Telegram Alerts
-
-- ✅ On success: snapshot ID + duration  
-- ❌ On failure: error message
-
----
-
-## 🔐 Security Tips
-
-- Use `EnvironmentFile=` in systemd service to store secrets
-- Protect script:
-
-```bash
-chmod 700 restic_rclone_webdav_backup.sh
-```
-
----
-
-## 🧪 Manual run
-
-```bash
-./restic_rclone_webdav_backup.sh
-```
-
----
-
-## 📄 License
-
-MIT — use at your own risk.
+bash
+Копировать
+Редактировать
+send_telegram "ℹ️ Custom message"
+❓ FAQ
+Dry-run uploads data? — No. --dry-run only prints what would be backed up, still triggering alerts.
+Where do I put my token? — /etc/miab-notify.env, never inside the repo.
+Can I use S3 instead of WebDAV? — Yes, just set RESTIC_REPO="s3:s3remote:bucket/folder" (must exist).
