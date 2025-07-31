@@ -72,7 +72,7 @@ source "$(dirname "$0")/telegram_notify.sh"
 # on any error → send ❌ and exit
 trap 'send_telegram "❌ *Restic Backup Failed* on $(hostname -f) at $(date +%F %T)"; exit 1' ERR
 
-export RESTIC_PASSWORD="cvZ7zJHHigkL7Rcw"
+export RESTIC_PASSWORD="YOURPASSWORD"
 export RESTIC_REPO="rclone:webdavbox:/backup"
 BACKUP_SRC="/home/user-data"
 LOG_FILE="/var/log/restic.log"
