@@ -119,13 +119,8 @@ restic -r rclone:webdavbox:/backup restore latest --target /tmp/restore-test
 | Cron not running            | Ensure cron service is active; remove stale lock file if any   |
 
 ---
-# miab-backups
 
-Tool for automatic backups of `/home/user-data` to Hetzner Storage Share (WebDAV) using Restic + Rclone with Telegram notifications.  
-Documentation: GUIDE.md  
-Scripts: `restic_rclone_webdav_backup.sh`, `telegram_notify.sh`
-
-# Full Guide
+# Full Guide For Begginers
 
 ## 1. Install dependencies  
     sudo apt update  
