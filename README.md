@@ -119,6 +119,95 @@ restic -r rclone:webdavbox:/backup restore latest --target /tmp/restore-test
 | Cron not running            | Ensure cron service is active; remove stale lock file if any   |
 
 ---
+# miab-backups
+
+Tool for automatic backups of `/home/user-data` to Hetzner Storage Share (WebDAV) using Restic + Rclone with Telegram notifications.  
+Documentation: GUIDE.md  
+Scripts: `restic_rclone_webdav_backup.sh`, `telegram_notify.sh`
+
+# Full Guide
+
+## 1. Install dependencies  
+    sudo apt update  
+    sudo apt install restic rclone jq curl -y  
+
+## 2. Create Hetzner Storage Share  
+1. In Hetzner Console → Storage → Shares → Create  
+2. Note your login (`uXXXXXX`), password and URL:  
+       https://uXXXXXX.your-storagebox.de  
+
+## 3. Configure rclone  
+    rclone config create webdavbox webdav \
+      url=https://uXXXXXX.your-storagebox.de \
+      vendor=hetzner user=uXXXXXX pass=YourPassword  
+    rclone lsd webdavbox:/backup || rclone mkdir webdavbox:/backup  
+
+## 4. Clone repository  
+    git clone https://github.com/Anton-Babaskin/miab-backups.git  
+    cd miab-backups  
+
+## 5. Configure variables  
+    sudo cp .env.example /etc/miab-notify.env  
+    sudo chmod 600 /etc/miab-notify.env  
+    sudo nano /etc/miab-notify.env  
+In `/etc/miab-notify.env` set:  
+    RESTIC_PASSWORD=YourResticPassword  
+    RESTIC_REPO="rclone:webdavbox:/backup"  
+    BOT_TOKEN=YourTelegramBotToken  
+    CHAT_ID=YourChatID  
+    LOG_FILE=/var/log/restic.log  
+
+## 6. Prepare log file  
+    sudo touch /var/log/restic.log  
+    sudo chown root:root /var/log/restic.log  
+    sudo chmod 644 /var/log/restic.log  
+
+## 7. Test Telegram notifications  
+    source telegram_notify.sh  
+    send_telegram "✅ Test notification"  
+
+## 8. Run backup manually  
+    ./restic_rclone_webdav_backup.sh  
+    tail -n 50 /var/log/restic.log  
+
+## 9. Set up auto-run  
+
+**Cron (daily at 03:00)**  
+    0 3 * * * root /path/to/miab-backups/restic_rclone_webdav_backup.sh  
+
+**Systemd**  
+Create `/etc/systemd/system/miab-backup.service` with:  
+    [Unit]  
+    Description=MIAB Restic Backup  
+
+    [Service]  
+    Type=oneshot  
+    EnvironmentFile=/etc/miab-notify.env  
+    ExecStart=/path/to/miab-backups/restic_rclone_webdav_backup.sh  
+
+    [Install]  
+    WantedBy=multi-user.target  
+
+Create `/etc/systemd/system/miab-backup.timer` with:  
+    [Unit]  
+    Description=Run MIAB backup daily at 3  
+
+    [Timer]  
+    OnCalendar=*-*-* 03:00:00  
+    Persistent=true  
+
+    [Install]  
+    WantedBy=timers.target  
+
+## 10. Useful commands  
+    rclone lsd webdavbox:/backup  
+    restic -r rclone:webdavbox:/backup init  
+    restic -r rclone:webdavbox:/backup backup /home/user-data  
+    restic -r rclone:webdavbox:/backup snapshots  
+
+> **Important:**  
+> - Never commit `/etc/miab-notify.env` with real tokens.  
+> - Always test commands manually before automating.  
 
 ## 🪪 License
 MIT — use at your own risk.
